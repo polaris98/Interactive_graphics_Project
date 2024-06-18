@@ -534,6 +534,27 @@
 	// Below is the mass-spring system code
 	///////////////////////////////////////////////////////////////////////////////////
 	var massSpring;
+
+	class Vec2 {
+		constructor(x, y) {
+			this.x = x;
+			this.y = y;
+		}
+
+		equals(other) {
+			return this.x === other.x && this.y === other.y;
+		}
+
+		hashCode() {
+			return `${this.x},${this.y}`;
+		}
+
+	// Ensure edge is always represented with smaller x first
+		static orderedEdge(edge) {
+			return edge.x < edge.y ? edge : new Vec2(edge.y, edge.x);
+		}
+	}
+
 	
 	class Vec3 {
 		constructor( x, y, z ) { this.init(x,y,z); }
@@ -569,7 +590,58 @@
 	}
 	
 	function ToVec3(a) { return new Vec3(a[0],a[1],a[2]); }
-	
+
+	// Dictionary to store edge information. `index` is the index to the edge
+	// array, `edges` the array of edges and `nfaces` the number of adjacent faces.
+	// We store only bidirectional edges to keep the dictionary small. Use the
+	// functions below to access this data.
+	class EdgeMap {
+		constructor() {
+			this.index = new Map(); // Equivalent to std::unordered_map<vec2i, int>
+			this.edges = [];        // Equivalent to std::vector<vec2i>
+			this.nfaces = [];       // Equivalent to std::vector<int>
+		}
+		
+	}	
+
+	function makeEdgeMap(triangles) {
+		const emap = new EdgeMap();
+		for (const t of triangles) {
+			insertEdge(emap, new Vec2(t.x, t.y));
+			insertEdge(emap, new Vec2(t.y, t.z));
+			insertEdge(emap, new Vec2(t.z, t.x));
+		}
+		return emap;
+	}	
+
+	function insertEdge(emap, edge) {
+		const es = Vec2.orderedEdge(edge);
+		const key = es.hashCode();
+		const it = emap.index.get(key);
+
+		if (it === undefined) {
+			const idx = emap.edges.length;
+			emap.index.set(key, idx);
+			emap.edges.push(es);
+			emap.nfaces.push(1);
+			return idx;
+		} else {
+			const idx = it;
+			emap.nfaces[idx] += 1;
+			
+			return idx;
+		}
+	}
+
+	function insertEdges(emap, triangles) { //check in the uffers
+		for (const t of triangles) {
+			insertEdge(emap, new Vec2(t.x, t.y));
+			insertEdge(emap, new Vec2(t.y, t.z));
+			insertEdge(emap, new Vec2(t.z, t.x));
+		}
+	}
+
+		
 	class MassSpring {
 	
 		constructor()
