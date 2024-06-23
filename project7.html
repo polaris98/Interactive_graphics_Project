@@ -604,15 +604,30 @@
 		
 	}	
 
-	function makeEdgeMap(triangles) {
+	// function makeEdgeMap(triangles) {
+	// 	const emap = new EdgeMap();
+	// 	for (const t of triangles) {
+	// 		insertEdge(emap, new Vec2(t.x, t.y));
+	// 		insertEdge(emap, new Vec2(t.y, t.z));
+	// 		insertEdge(emap, new Vec2(t.z, t.x));
+	// 	}
+	// 	return emap;
+	// }	
+
+	function makeEdgeMap(quads) {
 		const emap = new EdgeMap();
-		for (const t of triangles) {
-			insertEdge(emap, new Vec2(t.x, t.y));
-			insertEdge(emap, new Vec2(t.y, t.z));
-			insertEdge(emap, new Vec2(t.z, t.x));
+		for (const q of quads) {
+			var x = q[0];
+			var y = q[1];
+			var z = q[2];
+			var w = q[3];
+			insertEdge(emap, new Vec2(x, y));
+			insertEdge(emap, new Vec2(y, z));
+			if (z != w) insertEdge(emap, new Vec2(z, w));
+			insertEdge(emap, new Vec2(w, x));
 		}
 		return emap;
-	}	
+	}
 
 	function insertEdge(emap, edge) {
 		const es = Vec2.orderedEdge(edge);
@@ -633,12 +648,35 @@
 		}
 	}
 
-	function insertEdges(emap, triangles) { //check in the uffers
-		for (const t of triangles) {
-			insertEdge(emap, new Vec2(t.x, t.y));
-			insertEdge(emap, new Vec2(t.y, t.z));
-			insertEdge(emap, new Vec2(t.z, t.x));
-		}
+	// function insertEdges(emap, triangles) { //check in the uffers
+	// 	for (const t of triangles) {
+	// 		insertEdge(emap, new Vec2(t.x, t.y));
+	// 		insertEdge(emap, new Vec2(t.y, t.z));
+	// 		insertEdge(emap, new Vec2(t.z, t.x));
+	// 	}
+	// }
+
+	// function insert_edges(emap, quads) {
+	// 	for (const q of quads) {
+	// 		insertEdge(emap, new Vec2(q.x, q.y));
+	// 		insertEdge(emap, new Vec2(q.y, q.z));
+	// 		if (q.z != q.w) insert_edge(emap, new Vec2(q.z, q.w));
+	// 		insertEdge(emap, new Vec2(q.w, q.x));
+  	// 	}
+	// }
+
+	function getEdges(emap) {
+  	return emap.edges;
+	}
+
+	// function getEdgesFromTriangles(triangles) {
+	// const emap = makeEdgeMap(triangles);
+	// return getEdges(emap);
+	// }
+
+	function getEdgesFromQuads(quads) {
+		const emap = makeEdgeMap(quads);
+	return getEdges(emap);
 	}
 
 		
@@ -653,6 +691,7 @@
 			this.restitution = .8;
 			this.pinned0 = 1;
 			this.pinned1 = 64;
+			this.quads = [];
 			this.setMesh( document.getElementById('box.obj').text);
 			
 
@@ -678,22 +717,66 @@
 			this.mesh.shiftAndScale( shift, scale );
 			this.mesh.computeNormals();
 			this.reset();
+			this.updateMesh();
+			//this.updateQuads(this.quads, this.mesh.face, this.pos);
 			this.initSprings();
 			DrawScene();
 		}
+
+		// getTriangles() {
+		// 	const triangles = [];
+		// 	for (const face of this.mesh.face) {
+		// 	if (face.length >= 3) {
+		// 		for (let i = 1; i < face.length - 1; i++) {
+			
+		// 		triangles.push(new Vec3(
+		// 			face[0],
+		// 			face[i],
+		// 			face[i + 1],
+		// 		));
+		// 		}
+		// 	}
+		// 	}
+		// 	return triangles;
+		// }
+
 		//-------------------------INIT SPRINGS----------------------------------------------------------------------------------------------
 		initSprings()
 		{
 			this.springs = [];
-			for ( var i=0; i<this.pos.length; ++i ) {
-				for ( var j=i+1; j<this.pos.length; ++j ) {
-					var r = this.pos[i].sub(this.pos[j]).len();
-					if ( r > .02 ) 
-					{
-						this.springs.push( { p0:i, p1:j, rest:r } );
-					}
+			
+			const edges = getEdgesFromQuads(this.mesh.face);
+			for ( var k = 0 ; k<edges.length; ++k ){
+			//this return the position and not the index
+			var edge = edges[k];
+			//console.log(edges.length)
+			const i = edge.x;
+			const j = edge.y;
+			var r = this.pos[i].sub(this.pos[j]).len();
+			if ( r > .002 )
+				{
+					this.springs.push( { p0:i, p1:j, rest:r } );
+				}
+			
+			}
+
+			var faces = this.mesh.face;
+			for(var k = 0; k<faces.length; ++k){
+				var face = faces[k];
+				var x = face[0];
+				var y = face[1];
+				var z = face[2];
+				var w = face[3];
+				var r1 = this.pos[x].sub(this.pos[z]).len();
+				var r2 = this.pos[y].sub(this.pos[w]).len();
+				//console.log(r)
+				if ( r > .002 ){
+					//console.log("Ok")
+					this.springs.push( { p0:x, p1:z, rest:r1 } );
+					this.springs.push( { p0:y, p1:w, rest:r2 } );
 				}
 			}
+			
 		}
 		//-------------------------INIT SPRINGS----------------------------------------------------------------------------------------------
 		reset()
@@ -724,19 +807,23 @@
 					buffer[bi++] = vals[k].y;
 					buffer[bi++] = vals[k].z;
 				}
+
 				for ( var i=0, bi=0; i<faces.length; ++i ) {
 					var f = faces[i];
 					if ( f.length < 3 ) continue;
-					addTriangleToBuffer( buffer, bi, verts, f[0], f[1], f[2] );
+					//console.log(f.length);
+					addTriangleToBuffer( buffer, bi, verts, f[0], f[1], f[2]);
 					bi += 9;
 					for ( var j=3; j<f.length; ++j, bi+=9 ) {
 						addTriangleToBuffer( buffer, bi, verts, f[0], f[j-1], f[j] );
 					}
+					
+
 				}
 			}
-			
+
 			// update the position buffer
-			updateBuffer( this.buffers.positionBuffer, this.mesh.face, this.pos );
+			updateBuffer( this.buffers.positionBuffer, this.mesh.face, this.pos );	  
 			
 			// update normals
 			for ( var i=0; i<this.nrm.length; ++i ) this.nrm[i].init(0,0,0);
@@ -765,6 +852,37 @@
 			pointDrawer.updatePoint();
 			DrawScene();
 		}
+
+		updateQuads(quads, faces, verts)
+				{
+
+				function addQuadsToBuffer( buffer, bi, vals, i, j, k , w)
+				{
+					buffer[bi++] = vals[i].x;
+					buffer[bi++] = vals[i].y;
+					buffer[bi++] = vals[i].z;
+					buffer[bi++] = vals[j].x;
+					buffer[bi++] = vals[j].y;
+					buffer[bi++] = vals[j].z;
+					buffer[bi++] = vals[k].x;
+					buffer[bi++] = vals[k].y;
+					buffer[bi++] = vals[k].z;
+					buffer[bi++] = vals[w].x;
+					buffer[bi++] = vals[w].y;
+					buffer[bi++] = vals[w].z;
+				}
+
+				for ( var i=0, bi=0; i<faces.length; ++i ) {
+					var f = faces[i];
+					if ( f.length < 3 ) continue;
+					addQuadsToBuffer( quads, bi, verts, f[0], f[1], f[2],f[3]);
+					bi += 9;
+					for ( var j=3; j<f.length; ++j, bi+=9 ) {
+						//addQuadsToBuffer(quads, bi, verts, f[0], f[j-1], f[j]);
+					}
+					//console.log("next")
+				}
+			}
 	
 		simTimeStep()
 		{
@@ -774,8 +892,9 @@
 			// Update positions and velocities
 			var timestep = document.getElementById('timestep').value;
 			const dt = timestep / 1000;	// time step in seconds
+			var substeps = document.getElementById('substeps').value;
 			const damping = this.damping * this.stiffness * dt;
-			SimTimeStep( dt, this.pos, this.vel, this.springs, this.stiffness, damping, this.mass, this.gravity, this.restitution, this.pinned0, this.pinned1 );
+			simTimeStep(dt, substeps, this.pos, this.vel, this.springs, this.stiffness, damping, this.mass, this.gravity, this.restitution, this.pinned0, this.pinned1 );
 			
 			// make sure that the selected vertex does not change position
 			if ( p ) {
@@ -785,6 +904,7 @@
 			
 			this.updateMesh();
 		}
+
 		startSimulation()
 		{
 			var timestep = document.getElementById('timestep').value;
@@ -1014,6 +1134,12 @@
 		document.getElementById('timestep-value').innerText = s + " ms";
 	}
 	
+	function SetSubstepsSize( param )
+	{
+		var s = param.value;
+		document.getElementById('substeps-value').innerText = s;
+	}
+	
 	function SetGravity( param )
 	{
 		var v = param.value;
@@ -1231,6 +1357,7 @@
 	<div class="control"><input type="button" value="Start Simulation" onclick="massSpring.toggleSimulation(this)"></div>
 	<div class="control"><input type="button" value="Reset" onclick="massSpring.reset();DrawScene()"></div>
 	<div class="control"><span id="timestep-label">Time Step Size:</span><span class="value" id="timestep-value">20 ms</span><input id="timestep" type="range" min="1" max="100" value="20" oninput="SetTimeStepSize(this)" onchange="massSpring.restartSimulation()" ondblclick="this.value=20;this.oninput();this.onchange()"/></div>
+	<div class="control"><span id="timestep-label">Substeps:</span><span class="value" id="substeps-value">20 </span><input id="substeps" type="range" min="20" max="100" value="20" oninput="SetSubstepsSize(this)" onchange="massSpring.restartSimulation()" ondblclick="this.value=20;this.oninput();this.onchange()"/></div>
 	<div class="control"><span id="gravity-label">Gravity:</span><span class="value" id="gravity-value">1</span><input id="gravity" type="range" min="0" max="100" value="20" oninput="SetGravity(this)" ondblclick="this.value=20;this.oninput()"/></div>
 	<div class="control"><span id="mass-label">Mass:</span><span class="value" id="mass-value">1</span><input id="mass" type="range" min="1" max="100" value="20" oninput="SetMass(this)" ondblclick="this.value=20;this.oninput()"/></div>
 	<div class="control"><span id="stiffness-label">Stiffness:</span><span class="value" id="stiffness-value">1</span><input id="stiffness" type="range" min="0" max="100" value="20" oninput="SetStiffness(this)" ondblclick="this.value=20;this.oninput()"/></div>
