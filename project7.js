@@ -310,57 +310,163 @@ class MeshDrawer {
 // This function is called for every step of the simulation.
 // Its job is to advance the simulation for the given time step duration dt.
 // It updates the given positions and velocities.
-function SimTimeStep(dt, positions, velocities, springs, stiffness, damping, particleMass, gravity, restitution, pinned0, pinned1 ) {
-    var forces = Array(positions.length); // Initialize forces to zero
+// function simTimeStep(dt,substeps, positions, velocities, springs, stiffness, damping, particleMass, gravity, restitution, pinned0, pinned1 ) {
+//     var forces = Array(positions.length); // Initialize forces to zero
 
-    // Compute forces
-	for (var i = 0; i < positions.length; i++) {
-        forces[i] = new Vec3(0, 0, 0);
-        // Compute gravity force
-        forces[i].inc(gravity.mul(particleMass));
+//     // Compute forces
+// 	for (var i = 0; i < positions.length; i++) {
+//         forces[i] = new Vec3(0, 0, 0);
+//         // Compute gravity force
+//         forces[i].inc(gravity.mul(particleMass));
+//     }
+	
+// 	for(var i = 0;i<substeps;i++){
+// 		for (var i = 0; i < springs.length; i++) {
+// 			var spring = springs[i];
+// 			var particle0 = spring.p0;
+// 			var particle1 = spring.p1;
+// 			//console.log("ok");
+// 			//Calculate sping force
+// 			var d = positions[particle1].sub(positions[particle0]);
+// 			var dl = d.len();
+// 			var springForce = d.mul(stiffness * (dl - spring.rest) / dl);
+
+// 			// Calculate the damping force
+// 			var delta_v =  velocities[particle1].sub(velocities[particle0]);
+// 			var dampingForce = d.mul(damping * delta_v.dot(d) / dl);
+
+// 			// Total force 
+// 			var totalForce = springForce.add(dampingForce);
+
+// 			// Apply forces to the particles
+// 			forces[spring.p0] = forces[spring.p0].add(totalForce);
+// 			forces[spring.p1] = forces[spring.p1].sub(totalForce);
+// 		}
+// 	}
+// 	 // Update positions and velocities using semi-implicit Euler's method
+// 	 for (var i = 0; i < positions.length; i++) {
+//         if (!particleMass || i==pinned0 || i==pinned1) continue;
+//         velocities[i].inc(forces[i].mul(dt).div(particleMass)); // Update velocity
+//         positions[i].inc(velocities[i].mul(dt)); // Update position
+//     }
+
+// 	//apply dumping and sleeping
+// 	for(var i = 0;i<velocities.length;i++) {
+// 		if (!particleMass) continue;
+// 		// damping
+// 		velocities[i].scale(1 - damping * dt);
+// 		// sleeping
+// 		if (velocities[i].len < 0.01)
+// 		   velocities[i].set(0, 0, 0);
+// 	}
+
+// 	for (var i = 0; i < positions.length; i++) {
+//         // Check each dimension to see if the particle is outside the box
+//         ['x', 'y', 'z'].forEach(dim => {
+//             if (positions[i][dim] < -1) {
+//                 positions[i][dim] = -1 + (-1 - positions[i][dim]); // Reflect position
+//                 velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
+//             } else if (positions[i][dim] > 1) {
+//                 positions[i][dim] = 1 - (positions[i][dim] - 1); // Reflect position
+//                 velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
+//             }
+//         });
+//     }
+
+// }
+function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, damping, particleMass, gravity, restitution, pinned0, pinned1) {
+    var old_positions = Array(positions.length);
+
+	console.log("init_initialization")
+
+
+    // Save old positions and initialize velocities if needed
+    for (var i = 0; i < positions.length; i++) {
+        old_positions[i] = new Vec3(positions[i].x, positions[i].y, positions[i].z);
+        if (!velocities[i]) {
+            velocities[i] = new Vec3(0, 0, 0);
+        }
     }
 
-    // for (var i = 0; i < springs.length; i++) {
-	// 	var spring = springs[i];
-	// 	var particle0 = spring.p0;
-	// 	var particle1 = spring.p1;
-		
-	// 	//Calculate sping force
-    //     var d = positions[particle1].sub(positions[particle0]);
-    //     var dl = d.len();
-    //     var springForce = d.mul(stiffness * (dl - spring.rest) / dl);
-
-    //     // Calculate the damping force
-	// 	var delta_v =  velocities[particle1].sub(velocities[particle0]);
-    //     var dampingForce = d.mul(damping * delta_v.dot(d) / dl);
-
-    //     // Total force 
-    //     var totalForce = springForce.add(dampingForce);
-
-    //     // Apply forces to the particles
-    //     forces[spring.p0] = forces[spring.p0].add(totalForce);
-    //     forces[spring.p1] = forces[spring.p1].sub(totalForce);
-    // }
-
-	 // Update positions and velocities using semi-implicit Euler's method
-	 for (var i = 0; i < positions.length; i++) {
-        if (!particleMass || i==pinned0 || i==pinned1) continue;
-        velocities[i].inc(forces[i].mul(dt).div(particleMass)); // Update velocity
-        positions[i].inc(velocities[i].mul(dt)); // Update position
+    // Apply gravity and initial velocity update
+    for (var i = 0; i < positions.length; i++) {
+        if (i == pinned0 || i == pinned1) continue;
+        velocities[i].inc(gravity.mul(dt));
     }
 
-	//apply dumping and sleeping
-	for(var i = 0;i<velocities.length;i++) {
-		if (!particleMass) continue;
-		// damping
-		velocities[i].scale(1 - damping * dt);
-		// sleeping
-		if (velocities[i].len < 0.01)
-		   velocities[i].set(0, 0, 0);
-	}
+    // Update positions based on velocities
+    for (var i = 0; i < positions.length; i++) {
+        if (i == pinned0 || i == pinned1) continue;
+        positions[i].inc(velocities[i].mul(dt));
+    }
+	console.log("end_initialization")
 
-	for (var i = 0; i < positions.length; i++) {
-        // Check each dimension to see if the particle is outside the box
+	console.log("init_springs")
+    // Perform substeps for the spring constraints
+    for (var k = 0; k < substeps; k++) {
+        for (var i = 0; i < springs.length; i++) {
+            var spring = springs[i];
+            var particle0 = spring.p0;
+            var particle1 = spring.p1;
+
+			if(particleMass*2<=0) continue;
+
+            var d = positions[particle1].sub(positions[particle0]);
+            var dl = d.len();
+            if (dl > 0) {
+				d.scale(1 / dl);  // correction direction and amount
+				if(dl-spring.rest>0){
+				// console.log(d);
+				// console.log((dl - spring.rest) * stiffness / (particleMass * 2));
+                var corr = (dl - spring.rest) * stiffness  / (particleMass * 2);
+				var correction= d.mul(corr);
+                
+				//console.log(correction);
+				if(correction.len()>0){
+					// Update positions
+					if (particle0 !== pinned0 && particle0 !== pinned1) {
+						positions[particle0].inc(correction);
+					}
+					if (particle1 !== pinned0 && particle1 !== pinned1) {
+						positions[particle1].dec(correction);
+					}
+					
+				}
+			}
+            }
+        }
+    }
+	console.log("end_springs")
+	 // Ensure pinned particles stay fixed
+	positions[pinned0].set(old_positions[pinned0]);
+	positions[pinned1].set(old_positions[pinned1]);
+ 
+	console.log("init_euler")
+
+    // Update velocities using semi-implicit Euler's method
+    for (var i = 0; i < positions.length; i++) {
+        if (i == pinned0 || i == pinned1) continue;
+        var new_v = positions[i].sub(old_positions[i]);
+		new_v.scale(1 / dt);
+        velocities[i].set(new_v); // Update velocity
+    }
+
+	console.log("end_euler")
+	console.log("init_damping")
+    // Apply damping and handle sleeping
+    for (var i = 0; i < velocities.length; i++) {
+        if (i == pinned0 || i == pinned1) continue;
+        velocities[i].scale(1 - damping * dt);
+        if (velocities[i].len() < 0.01) {
+            velocities[i].set(0, 0, 0);
+        }
+    }
+	
+	console.log("end_damping")
+
+	console.log("init_collision")
+    // Handle collisions with the boundaries
+    for (var i = 0; i < positions.length; i++) {
         ['x', 'y', 'z'].forEach(dim => {
             if (positions[i][dim] < -1) {
                 positions[i][dim] = -1 + (-1 - positions[i][dim]); // Reflect position
@@ -371,6 +477,5 @@ function SimTimeStep(dt, positions, velocities, springs, stiffness, damping, par
             }
         });
     }
-
+	console.log("end_collision")
 }
-
