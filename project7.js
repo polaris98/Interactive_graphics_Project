@@ -377,9 +377,6 @@ class MeshDrawer {
 function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, damping, particleMass, gravity, restitution, pinned0, pinned1) {
     var old_positions = Array(positions.length);
 
-	console.log("init_initialization")
-
-
     // Save old positions and initialize velocities if needed
     for (var i = 0; i < positions.length; i++) {
         old_positions[i] = new Vec3(positions[i].x, positions[i].y, positions[i].z);
@@ -392,16 +389,24 @@ function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, da
     for (var i = 0; i < positions.length; i++) {
         if (i == pinned0 || i == pinned1) continue;
         velocities[i].inc(gravity.mul(dt));
+		positions[i].inc(velocities[i].mul(dt));
     }
 
-    // Update positions based on velocities
-    for (var i = 0; i < positions.length; i++) {
-        if (i == pinned0 || i == pinned1) continue;
-        positions[i].inc(velocities[i].mul(dt));
+	//prestabilization and collision handling
+	for(var k=0; k<3; k++){
+		for (var i = 0; i < positions.length; i++) {
+			['x', 'y', 'z'].forEach(dim => {
+				if (old_positions[i][dim] < -1) {
+					positions[i][dim] = -1 + (-1 - old_positions[i][dim]); // Reflect position
+					velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
+				} else if (positions[i][dim] > 1) {
+					positions[i][dim] = 1 - (old_positions[i][dim] - 1); // Reflect position
+					velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
+				}
+			});
+		}
     }
-	console.log("end_initialization")
 
-	console.log("init_springs")
     // Perform substeps for the spring constraints
     for (var k = 0; k < substeps; k++) {
         for (var i = 0; i < springs.length; i++) {
@@ -409,19 +414,15 @@ function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, da
             var particle0 = spring.p0;
             var particle1 = spring.p1;
 
+			//self collision
 			if(particleMass*2<=0) continue;
-
+			var r = 0.005;
             var d = positions[particle1].sub(positions[particle0]);
-            var dl = d.len();
-            if (dl > 0) {
-				d.scale(1 / dl);  // correction direction and amount
-				if(dl-spring.rest>0){
-				// console.log(d);
-				// console.log((dl - spring.rest) * stiffness / (particleMass * 2));
-                var corr = (dl - spring.rest) * stiffness  / (particleMass * 2);
+			var dl = d.len();
+			if(dl<2*r){
+				d.scale(1 / dl);
+				var corr = (dl -2*r)/particleMass;
 				var correction= d.mul(corr);
-                
-				//console.log(correction);
 				if(correction.len()>0){
 					// Update positions
 					if (particle0 !== pinned0 && particle0 !== pinned1) {
@@ -433,15 +434,34 @@ function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, da
 					
 				}
 			}
+			//compute springs
+			d = positions[particle1].sub(positions[particle0]);
+            var dl = d.len();
+            if (dl > 0) {
+				d.scale(1 / dl);  // correction direction and amount
+				if(dl-spring.rest>0){
+			
+					var corr = (dl - spring.rest) * stiffness  / (particleMass * 2);
+					var correction= d.mul(corr);
+					
+					if(correction.len()>0){
+						// Update positions
+						if (particle0 !== pinned0 && particle0 !== pinned1) {
+							positions[particle0].inc(correction);
+						}
+						if (particle1 !== pinned0 && particle1 !== pinned1) {
+							positions[particle1].dec(correction);
+						}
+					
+					}
+				}
             }
         }
     }
-	console.log("end_springs")
-	 // Ensure pinned particles stay fixed
+	
+	// Ensure pinned particles stay fixed
 	positions[pinned0].set(old_positions[pinned0]);
 	positions[pinned1].set(old_positions[pinned1]);
- 
-	console.log("init_euler")
 
     // Update velocities using semi-implicit Euler's method
     for (var i = 0; i < positions.length; i++) {
@@ -451,31 +471,13 @@ function simTimeStep(dt, substeps, positions, velocities, springs, stiffness, da
         velocities[i].set(new_v); // Update velocity
     }
 
-	console.log("end_euler")
-	console.log("init_damping")
     // Apply damping and handle sleeping
     for (var i = 0; i < velocities.length; i++) {
         if (i == pinned0 || i == pinned1) continue;
         velocities[i].scale(1 - damping * dt);
-        if (velocities[i].len() < 0.01) {
+        if (velocities[i].len() < 0.005) {
             velocities[i].set(0, 0, 0);
         }
     }
 	
-	console.log("end_damping")
-
-	console.log("init_collision")
-    // Handle collisions with the boundaries
-    for (var i = 0; i < positions.length; i++) {
-        ['x', 'y', 'z'].forEach(dim => {
-            if (positions[i][dim] < -1) {
-                positions[i][dim] = -1 + (-1 - positions[i][dim]); // Reflect position
-                velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
-            } else if (positions[i][dim] > 1) {
-                positions[i][dim] = 1 - (positions[i][dim] - 1); // Reflect position
-                velocities[i][dim] = -velocities[i][dim] * restitution; // Reflect velocity
-            }
-        });
-    }
-	console.log("end_collision")
 }
